@@ -1,0 +1,30 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Model weights (too large for GitHub — stored on Google Drive)
+weights/*.pth
+
+# Datasets (too large for GitHub — stored on Google Drive)
+notebooks/input/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
