@@ -25,7 +25,7 @@ image_paths = [os.path.join(x_test_dir, image_id) for image_id in sorted(os.list
 mask_paths = [os.path.join(y_test_dir, image_id) for image_id in sorted(os.listdir(y_test_dir))]
 
 # Read first test image (index 0)
-idx = 0
+idx = 1
 image = cv2.cvtColor(cv2.imread(image_paths[idx]), cv2.COLOR_BGR2RGB)
 mask = cv2.cvtColor(cv2.imread(mask_paths[idx]), cv2.COLOR_BGR2RGB)
 

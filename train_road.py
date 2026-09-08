@@ -128,6 +128,7 @@ def main():
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=0)
 
     EPOCHS = 30
+    
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {DEVICE}")
     model = model.to(DEVICE)
