@@ -8,3 +8,5 @@ opencv-python
 tqdm
 albumentations
 segmentation-models-pytorch
+tensorboard
+python-docx

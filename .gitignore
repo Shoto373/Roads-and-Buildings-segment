@@ -28,3 +28,8 @@ notebooks/input/
 .DS_Store
 Thumbs.db
 desktop.ini
+~$*.docx
+
+# TensorBoard logs
+runs/
+

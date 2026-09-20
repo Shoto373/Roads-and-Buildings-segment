@@ -1,13 +1,100 @@
 
 # Building and Road Segmentation from Aerial Images using EffUNet
 
-In city, information about urban objects such as water supply, railway lines, power lines, buildings, roads, etc., is necessary for city planning. In particular, information about the spread of these objects, locations and capacity is needed for the policymakers to make impactful decisions. This thesis aims to segment the building and roads from the aerial image captured by the satellites and UAVs. Many different architectures have been proposed for the semantic segmentation task and UNet being one of them. In this thesis, we propose a novel architecture based on Google’s newly proposed EfficientNetV2 as an encoder for feature extraction with UNet decoder for constructing the segmentation map. Using this approach we achieved a benchmark score for the Massachusetts Building and Road dataset with an mIOU of 0.8365 and 0.9153 respectively.
+In city, information about urban objects such as water supply, railway lines, power lines, buildings, roads, etc., is necessary for city planning. In particular, information about the spread of these objects, locations and capacity is needed for the policymakers to make impactful decisions. This thesis aims to segment the building and roads from the aerial image captured by the satellites and UAVs. Many different architectures have been proposed for the semantic segmentation task and UNet being one of them. In this thesis, we propose a novel architecture based on Google's newly proposed EfficientNetV2 as an encoder for feature extraction with UNet decoder for constructing the segmentation map. Using this approach we achieved a benchmark score for the Massachusetts Building and Road dataset with an mIOU of 0.8365 and 0.9153 respectively.
 
 
 ## Tech Stack
 
-**Libraries:** PyTorch, Numpy, Matplotlib, SMP 
+**Libraries:** PyTorch, Numpy, Matplotlib, SMP, TensorBoard
 
+## Project Structure
+
+```
+├── config.py                # Centralized configuration & CLI parser
+├── train.py                 # Unified training script (road & building)
+├── inference.py             # Unified inference (custom images, batch, TTA)
+├── evaluate.py              # Full test-set evaluation with metrics
+├── create_docx.py           # Project report generation (.docx)
+├── create_changes_docx.py   # Codebase changes report generation (.docx)
+├── requirements.txt
+├── notebooks/
+│   ├── building/            # Jupyter experiments (V2S, V2M, V2L, B7, MiTB5)
+│   ├── road/                # Jupyter experiments (V2S, V2M, V2L, B7)
+│   └── input/               # Datasets (gitignored)
+├── weights/                 # Model checkpoints (gitignored)
+├── outputs/                 # Plots, demo images, metrics JSON
+└── reports/                 # Project reports (.md and .docx)
+```
+
+## Key Features
+
+- **Combo Loss** (Dice + BCE) — improved segmentation of thin structures (roads)
+- **Mixed Precision (AMP)** — ~1.5x faster training on GPU
+- **Early Stopping** — prevents overfitting with configurable patience
+- **TensorBoard** — live training metrics visualization
+- **Test-Time Augmentation (TTA)** — improved inference with multi-view averaging
+- **Rich Augmentations** — ColorJitter, GaussNoise, Blur, CLAHE, BrightnessContrast
+- **Multiple Decoders** — UNet, UNet++, DeepLabV3+ via CLI flag
+- **Unified CLI** — one script per task, configurable via `--task road/building`
+
+## Quick Start
+
+### Installation
+```bash
+git clone https://github.com/Shoto373/Roads-and-Buildings-segment.git
+cd Roads-and-Buildings-segment
+python -m venv .venv
+.\.venv\Scripts\activate       # Windows
+# source .venv/bin/activate    # Linux/Mac
+pip install -r requirements.txt
+```
+
+### Data Preparation
+Download datasets via Kaggle API and extract to `notebooks/input/`:
+```bash
+kaggle datasets download -d balraj98/massachusetts-buildings-dataset
+kaggle datasets download -d balraj98/massachusetts-roads-dataset
+```
+
+### Training
+```bash
+# Train road segmentation (default)
+python train.py --task road
+
+# Train building segmentation
+python train.py --task building
+
+# Custom configuration
+python train.py --task road --epochs 50 --decoder UnetPlusPlus --batch-size 4
+
+# Monitor training
+tensorboard --logdir=runs
+```
+
+### Inference
+```bash
+# Single demo prediction
+python inference.py --task road --idx 0
+
+# Predict on custom input image
+python inference.py --task road --input-image path/to/image.png
+
+# Generate 10 examples
+python inference.py --task road --num-examples 10
+
+# With Test-Time Augmentation
+python inference.py --task road --tta --num-examples 10
+```
+
+### Evaluation
+```bash
+# Full test-set evaluation
+python evaluate.py --task road
+
+# With TTA
+python evaluate.py --task road --tta
+```
 
 
 ## Results
