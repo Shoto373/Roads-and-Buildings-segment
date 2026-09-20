@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+runs
+notebooks/input
+frontend/node_modules
+frontend/dist
+.DS_Store
+Thumbs.db
