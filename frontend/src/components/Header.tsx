@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, FileText, Layers } from 'lucide-react';
+import { Activity, Cpu, Layers } from 'lucide-react';
 import type { HealthStatus } from '../types';
 
 interface HeaderProps {
@@ -23,23 +23,34 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-slate-800 bg-[#0d1322]/80 backdrop-blur-md sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Left: Brand logo & Title */}
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+        {/* Left: Brand logo & Title (click navigates to home/segmentation) */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('segment');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="flex items-center space-x-3 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded-xl transition-all hover:scale-[1.01]"
+          title="На главную страницу"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/40 group-hover:from-cyan-400 group-hover:to-blue-500 transition-all">
             <Layers className="w-5 h-5 text-black font-bold" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-white tracking-tight text-lg">Aerial SegNet</span>
-              <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
-                EffUNet-B7
+              <span className="font-bold text-white tracking-tight text-lg group-hover:text-cyan-300 transition-colors">GeoSegNet Dual</span>
+              <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hidden sm:inline-block">
+                ✈️ 1500px UNet
+              </span>
+              <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 hidden sm:inline-block">
+                🛰️ 1024px DeepLabV3+
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
-              Сегментация дорожной сети и зданий по аэрофотоснимкам
+            <p className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors hidden sm:block">
+              Двухмодельная система сегментации: Аэрофотопланы + Спутниковые снимки
             </p>
           </div>
-        </div>
+        </button>
 
         {/* Center: Navigation Tabs */}
         <nav className="flex items-center space-x-1 sm:space-x-2">
@@ -116,16 +127,6 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Swagger link */}
-          <a
-            href="/docs"
-            target="_blank"
-            rel="noreferrer"
-            className="p-2 text-slate-400 hover:text-cyan-400 transition-colors hidden sm:block"
-            title="Swagger API Документация"
-          >
-            <FileText className="w-4 h-4" />
-          </a>
 
           {/* GitHub link */}
           <a

@@ -37,4 +37,10 @@ runs/
 frontend/node_modules/
 frontend/dist/
 .pytest_cache/
+# Temporary raw test images
+*.tif
+*.tiff
+outputs/ryazan_*
+outputs/thresh_*
+outputs/test_austin_*
 

@@ -26,7 +26,7 @@ def test_health_endpoint(client):
 
 
 def test_metrics_road_endpoint(client):
-    """Verify road metrics schema and reasonable bounds."""
+    """Verify road metrics schema, reasonable bounds, and presence of relaxed metrics."""
     response = client.get("/api/metrics/road")
     assert response.status_code == 200
     data = response.json()
@@ -36,6 +36,10 @@ def test_metrics_road_endpoint(client):
     assert 0.0 <= metrics["iou"] <= 1.0
     assert 0.0 <= metrics["dice"] <= 1.0
     assert 0.0 <= metrics["accuracy"] <= 1.0
+    # Verify relaxed metrics if present
+    if "relaxed_3px_iou" in metrics:
+        assert 0.0 <= metrics["relaxed_3px_iou"] <= 1.0
+        assert metrics["relaxed_3px_iou"] >= metrics["iou"]  # Relaxed IoU must be >= Strict IoU
 
 
 def test_metrics_building_endpoint(client):
@@ -111,3 +115,22 @@ def test_segment_invalid_task(client):
         data={"task": "unknown_task"},
     )
     assert response.status_code == 400
+
+
+def test_segment_satellite_endpoint_success(client):
+    """Verify inference on satellite mode with satellite_road task."""
+    img = Image.new("RGB", (128, 128), color=(80, 110, 70))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    response = client.post(
+        "/api/segment",
+        files={"file": ("sat_test.png", buf, "image/png")},
+        data={"task": "satellite_road", "tta": "false", "opacity": "0.6"},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["task"] == "satellite_road"
+    assert result["dimensions"]["width"] == 128
+    assert "telemetry" in result

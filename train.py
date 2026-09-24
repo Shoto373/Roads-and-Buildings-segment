@@ -25,6 +25,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from config import parse_args
+from deepglobe_dataset import DeepGlobeDataset, load_deepglobe_samples
 
 
 # ---------------------------------------------------------------------------
@@ -243,18 +244,52 @@ def main():
     )
 
     # Datasets
-    train_dataset = SegmentationDataset(
-        cfg.data.train_images_dir,
-        cfg.data.train_masks_dir,
-        augmentation=get_training_augmentation(cfg),
-        preprocessing=get_preprocessing(preprocessing_fn),
-    )
-    valid_dataset = SegmentationDataset(
-        cfg.data.val_images_dir,
-        cfg.data.val_masks_dir,
-        augmentation=get_validation_augmentation(cfg),
-        preprocessing=get_preprocessing(preprocessing_fn),
-    )
+    limit = getattr(cfg, '_limit', None)
+    if cfg.data.task == "deepglobe":
+        print(f"Loading DeepGlobe dataset from: {cfg.data.dataset_dir}")
+        train_samples, val_samples, _ = load_deepglobe_samples(cfg.data.dataset_dir)
+        if len(train_samples) == 0:
+            raise FileNotFoundError(
+                f"No DeepGlobe training images found in: {cfg.data.dataset_dir}\n"
+                f"Please download the dataset from https://www.kaggle.com/datasets/balraj98/deepglobe-road-extraction-dataset "
+                f"and extract it into: {cfg.data.dataset_dir}"
+            )
+        if limit:
+            val_lim = max(2, limit // 5)
+            print(f"Trial mode: limiting to {limit} train and {val_lim} val samples.")
+            train_samples = train_samples[:limit]
+            val_samples = val_samples[:val_lim]
+
+        train_dataset = DeepGlobeDataset(
+            train_samples,
+            augmentation=get_training_augmentation(cfg),
+            preprocessing=get_preprocessing(preprocessing_fn),
+        )
+        valid_dataset = DeepGlobeDataset(
+            val_samples,
+            augmentation=get_validation_augmentation(cfg),
+            preprocessing=get_preprocessing(preprocessing_fn),
+        )
+    else:
+        train_dataset = SegmentationDataset(
+            cfg.data.train_images_dir,
+            cfg.data.train_masks_dir,
+            augmentation=get_training_augmentation(cfg),
+            preprocessing=get_preprocessing(preprocessing_fn),
+        )
+        valid_dataset = SegmentationDataset(
+            cfg.data.val_images_dir,
+            cfg.data.val_masks_dir,
+            augmentation=get_validation_augmentation(cfg),
+            preprocessing=get_preprocessing(preprocessing_fn),
+        )
+        if limit:
+            val_lim = max(2, limit // 5)
+            print(f"Trial mode: limiting to {limit} train and {val_lim} val samples.")
+            train_dataset.image_paths = train_dataset.image_paths[:limit]
+            train_dataset.mask_paths = train_dataset.mask_paths[:limit]
+            valid_dataset.image_paths = valid_dataset.image_paths[:val_lim]
+            valid_dataset.mask_paths = valid_dataset.mask_paths[:val_lim]
 
     train_loader = DataLoader(
         train_dataset,
@@ -366,8 +401,9 @@ def main():
         lr_scheduler.step()
 
         # ---- Checkpointing ----
-        if valid_iou > best_iou_score:
-            best_iou_score = valid_iou
+        if valid_iou > best_iou_score or epoch == 0:
+            if valid_iou > best_iou_score:
+                best_iou_score = valid_iou
             epochs_no_improve = 0
             checkpoint = {
                 'epoch': epoch,

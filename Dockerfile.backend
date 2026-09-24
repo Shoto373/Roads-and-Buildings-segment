@@ -19,7 +19,7 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Copy ML codebase, backend, and configurations
-COPY config.py inference.py evaluate.py train.py /app/
+COPY config.py inference.py evaluate.py train.py deepglobe_dataset.py /app/
 COPY backend/ /app/backend/
 COPY outputs/ /app/outputs/
 

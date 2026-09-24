@@ -18,8 +18,10 @@ class SegmentationService:
     """Orchestrates image decoding, neural inference, and overlay rendering."""
 
     DEFAULT_COLORS = {
-        "road": (0, 229, 255),       # Cyan / Electric Blue (R, G, B)
-        "building": (16, 185, 129),   # Emerald Green (R, G, B)
+        "road": (0, 229, 255),            # Cyan / Electric Blue (Aerial Roads)
+        "building": (16, 185, 129),        # Emerald Green (Aerial Buildings)
+        "satellite_road": (245, 158, 11),  # Amber Gold / Solar Orange (Satellite Roads)
+        "satellite": (245, 158, 11),
     }
 
     @staticmethod
@@ -78,9 +80,14 @@ class SegmentationService:
         # 2. Get model & preprocessing
         model, is_logits, preprocessing_fn = model_manager.get_model(task)
 
-        # 3. Calculate pad size (multiple of 32, minimum 1536)
-        padded_h = max(1536, int(np.ceil(orig_h / 32.0) * 32))
-        padded_w = max(1536, int(np.ceil(orig_w / 32.0) * 32))
+        # 3. Calculate pad size (multiple of 32)
+        # Satellite images are natively 1024x1024; aerial images are 1500x1500 padded to 1536
+        if task in ("satellite_road", "satellite", "deepglobe"):
+            padded_h = max(1024, int(np.ceil(orig_h / 32.0) * 32))
+            padded_w = max(1024, int(np.ceil(orig_w / 32.0) * 32))
+        else:
+            padded_h = max(1536, int(np.ceil(orig_h / 32.0) * 32))
+            padded_w = max(1536, int(np.ceil(orig_w / 32.0) * 32))
         pad_size = max(padded_h, padded_w)
 
         # 4. Neural inference

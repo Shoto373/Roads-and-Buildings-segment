@@ -5,6 +5,7 @@ Supports both road and building segmentation tasks via CLI arguments.
 
 import argparse
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -12,7 +13,7 @@ from typing import List, Optional
 @dataclass
 class DataConfig:
     """Dataset paths and image parameters."""
-    task: str = "road"  # "road" or "building"
+    task: str = "road"  # "road", "building", or "deepglobe"
     base_dir: str = "notebooks/input"
     image_size: int = 1500      # Original image size
     padded_size: int = 1536     # Padded to be divisible by 32
@@ -20,7 +21,18 @@ class DataConfig:
 
     @property
     def dataset_dir(self) -> str:
-        if self.task == "road":
+        if self.task == "deepglobe":
+            candidates = [
+                os.path.join(self.base_dir, "deepglobe-road-extraction-dataset"),
+                os.path.join(self.base_dir, "deepglobe-road-dataset"),
+                os.path.join(self.base_dir, "deepglobe"),
+                "deepglobe-road-extraction-dataset",
+            ]
+            for c in candidates:
+                if os.path.isdir(c):
+                    return c
+            return candidates[0]
+        elif self.task == "road":
             return os.path.join(self.base_dir, "massachusetts-roads-dataset", "tiff")
         else:
             return os.path.join(self.base_dir, "massachusetts-buildings-dataset", "tiff")
@@ -31,6 +43,8 @@ class DataConfig:
 
     @property
     def train_masks_dir(self) -> str:
+        if self.task == "deepglobe":
+            return os.path.join(self.dataset_dir, "train")
         return os.path.join(self.dataset_dir, "train_labels")
 
     @property
@@ -51,7 +65,7 @@ class DataConfig:
 
     @property
     def class_names(self) -> List[str]:
-        if self.task == "road":
+        if self.task in ["road", "deepglobe"]:
             return ["background", "road"]
         else:
             return ["background", "building"]
@@ -120,27 +134,31 @@ class Config:
         return os.path.join("runs", self.data.task)
 
 
-def parse_args(description: str = "Segmentation") -> Config:
+def parse_args(args=None, description: str = "Segmentation") -> Config:
     """Parse CLI arguments and return a Config object."""
+    if isinstance(args, str):
+        description = args
+        args = None
+
     parser = argparse.ArgumentParser(description=description)
 
     # Task
     parser.add_argument("--task", type=str, default="road",
-                        choices=["road", "building"],
-                        help="Segmentation task: road or building (default: road)")
+                        choices=["road", "building", "deepglobe"],
+                        help="Segmentation task: road, building, or deepglobe (default: road)")
 
     # Model
     parser.add_argument("--encoder", type=str, default="efficientnet-b7",
-                        help="Encoder backbone (default: efficientnet-b7)")
+                        help="Encoder backbone (default: efficientnet-b7, or resnet34 for deepglobe)")
     parser.add_argument("--decoder", type=str, default="Unet",
                         choices=["Unet", "UnetPlusPlus", "DeepLabV3Plus"],
-                        help="Decoder architecture (default: Unet)")
+                        help="Decoder architecture (default: Unet, or DeepLabV3Plus for deepglobe)")
 
     # Training
     parser.add_argument("--epochs", type=int, default=30,
                         help="Number of training epochs (default: 30)")
     parser.add_argument("--batch-size", type=int, default=8,
-                        help="Training batch size (default: 8)")
+                        help="Training batch size (default: 8, or 4 for deepglobe)")
     parser.add_argument("--lr", type=float, default=1e-4,
                         help="Learning rate (default: 0.0001)")
     parser.add_argument("--no-amp", action="store_true",
@@ -159,24 +177,55 @@ def parse_args(description: str = "Segmentation") -> Config:
                         help="Path to model weights file (overrides default)")
     parser.add_argument("--input-image", type=str, default=None,
                         help="Path to a custom input image for single inference")
+    parser.add_argument("--slacks", type=int, nargs="+", default=[2, 3, 5],
+                        help="Slack distances in pixels for relaxed IoU evaluation (default: 2 3 5)")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Limit number of test images to evaluate (default: all)")
 
-    args = parser.parse_args()
+    cli_str = " ".join(args) if args is not None else " ".join(sys.argv)
+    parsed_args = parser.parse_args(args=args)
 
     config = Config()
-    config.data.task = args.task
-    config.model.encoder = args.encoder
-    config.model.decoder = args.decoder
-    config.train.epochs = args.epochs
-    config.train.batch_size = args.batch_size
-    config.train.lr = args.lr
-    config.train.use_amp = not args.no_amp
-    config.train.patience = args.patience
+    config.data.task = parsed_args.task
+
+    if parsed_args.task == "deepglobe":
+        # Satellite imagery configuration: 1024x1024 native resolution
+        config.data.image_size = 1024
+        config.data.padded_size = 1024
+        config.data.crop_size = 512
+
+        # Smart defaults for DeepGlobe if not overridden explicitly
+        if "--decoder" not in cli_str:
+            config.model.decoder = "DeepLabV3Plus"
+        else:
+            config.model.decoder = parsed_args.decoder
+
+        if "--encoder" not in cli_str:
+            config.model.encoder = "resnet34"
+        else:
+            config.model.encoder = parsed_args.encoder
+
+        if "--batch-size" not in cli_str:
+            config.train.batch_size = 4
+        else:
+            config.train.batch_size = parsed_args.batch_size
+    else:
+        config.model.encoder = parsed_args.encoder
+        config.model.decoder = parsed_args.decoder
+        config.train.batch_size = parsed_args.batch_size
+
+    config.train.epochs = parsed_args.epochs
+    config.train.lr = parsed_args.lr
+    config.train.use_amp = not parsed_args.no_amp
+    config.train.patience = parsed_args.patience
 
     # Store extra args for inference/evaluate scripts
-    config._num_examples = args.num_examples
-    config._idx = args.idx
-    config._tta = args.tta
-    config._weights_path = args.weights
-    config._input_image = args.input_image
+    config._num_examples = parsed_args.num_examples
+    config._idx = parsed_args.idx
+    config._tta = parsed_args.tta
+    config._weights_path = parsed_args.weights
+    config._input_image = parsed_args.input_image
+    config._slacks = tuple(parsed_args.slacks)
+    config._limit = parsed_args.limit
 
     return config

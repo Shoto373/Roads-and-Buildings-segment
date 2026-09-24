@@ -10,6 +10,10 @@ interface ImageDropzoneProps {
   selectedSampleId: string | null;
   previewUrl: string | null;
   disabled: boolean;
+  modeTitle?: string;
+  modeSubtitle?: string;
+  themeColor?: 'cyan' | 'amber' | 'emerald';
+  compact?: boolean;
 }
 
 export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
@@ -20,10 +24,41 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
   selectedSampleId,
   previewUrl,
   disabled,
+  modeTitle,
+  modeSubtitle,
+  themeColor = 'cyan',
+  compact = false,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAmber = themeColor === 'amber';
+  const isEmerald = themeColor === 'emerald';
+
+  const activeBorderClass = isAmber
+    ? 'border-amber-400 bg-amber-950/20'
+    : isEmerald
+    ? 'border-emerald-400 bg-emerald-950/20'
+    : 'border-cyan-400 bg-cyan-950/20';
+
+  const activeSelectedBorder = isAmber
+    ? 'border-amber-500/50 bg-slate-900/60'
+    : isEmerald
+    ? 'border-emerald-500/50 bg-slate-900/60'
+    : 'border-cyan-500/50 bg-slate-900/60';
+
+  const iconTextClass = isAmber
+    ? 'text-amber-400'
+    : isEmerald
+    ? 'text-emerald-400'
+    : 'text-cyan-400';
+
+  const linkTextClass = isAmber
+    ? 'text-amber-400'
+    : isEmerald
+    ? 'text-emerald-400'
+    : 'text-cyan-400';
 
   const validateAndSetFile = (file: File) => {
     setErrorMsg(null);
@@ -32,7 +67,7 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
     const isValid = validExtensions.some((ext) => fileName.endsWith(ext));
 
     if (!isValid) {
-      setErrorMsg(`Неподдерживаемый формат файла. Допустимы: ${validExtensions.join(', ')}`);
+      setErrorMsg(`Неподдерживаемый формат. Допустимы: ${validExtensions.join(', ')}`);
       return;
     }
 
@@ -70,20 +105,20 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Upload Zone */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => !disabled && !selectedFile && !selectedSampleId && fileInputRef.current?.click()}
-        className={`relative rounded-2xl border-2 border-dashed p-6 transition-all duration-200 text-center ${
+        className={`relative rounded-2xl border-2 border-dashed ${compact ? 'p-4' : 'p-6'} transition-all duration-200 text-center ${
           disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
         } ${
           isDragOver
-            ? 'border-cyan-400 bg-cyan-950/20'
+            ? activeBorderClass
             : selectedFile || selectedSampleId
-            ? 'border-cyan-500/40 bg-slate-900/60'
+            ? activeSelectedBorder
             : 'border-slate-700 hover:border-slate-500 bg-slate-900/40 hover:bg-slate-900/70'
         }`}
       >
@@ -99,11 +134,11 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
         {previewUrl ? (
           /* Preview Mode */
           <div className="flex flex-col items-center">
-            <div className="relative group rounded-xl overflow-hidden border border-slate-700 max-h-64 shadow-xl">
+            <div className={`relative group rounded-xl overflow-hidden border border-slate-700 ${compact ? 'max-h-48' : 'max-h-64'} shadow-xl`}>
               <img
                 src={previewUrl}
-                alt="Selected aerial view"
-                className="max-h-64 object-contain rounded-lg"
+                alt="Selected view"
+                className={`${compact ? 'max-h-48' : 'max-h-64'} object-contain rounded-lg`}
               />
               <button
                 type="button"
@@ -118,8 +153,8 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="mt-3 text-xs text-slate-400 flex items-center gap-2">
-              <span className="font-medium text-slate-200">
+            <div className="mt-2 text-xs text-slate-400 flex items-center gap-2">
+              <span className="font-medium text-slate-200 truncate max-w-xs">
                 {selectedFile?.name || 'Предустановленный снимок'}
               </span>
               {selectedFile && (
@@ -129,17 +164,17 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
           </div>
         ) : (
           /* Empty / Upload prompt */
-          <div className="py-6 flex flex-col items-center justify-center space-y-3">
-            <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
-              <UploadCloud className="w-7 h-7" />
+          <div className={`${compact ? 'py-3 space-y-2' : 'py-5 space-y-3'} flex flex-col items-center justify-center`}>
+            <div className={`${compact ? 'w-10 h-10' : 'w-12 h-12'} rounded-full bg-slate-800 flex items-center justify-center ${iconTextClass} group-hover:scale-105 transition-transform`}>
+              <UploadCloud className={`${compact ? 'w-5 h-5' : 'w-6 h-6'}`} />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-200">
-                Перетащите аэрофотоснимок сюда или{' '}
-                <span className="text-cyan-400 hover:underline">выберите на диске</span>
+                {modeTitle ? modeTitle : 'Перетащите снимок сюда или '}{' '}
+                <span className={`${linkTextClass} hover:underline`}>выберите на диске</span>
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Поддерживаются PNG, JPG, JPEG, TIFF • До 30 МБ • Произвольное разрешение
+                {modeSubtitle || 'Поддерживаются PNG, JPG, TIFF • До 30 МБ'}
               </p>
             </div>
           </div>
@@ -156,13 +191,13 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
 
       {/* Quick Sample Presets */}
       {samples.length > 0 && (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-3">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            <span>Или протестируйте на готовых снимках (1 клик):</span>
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-2">
+            <Sparkles className={`w-3.5 h-3.5 ${iconTextClass}`} />
+            <span>Примеры снимков для быстрого теста:</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className={`grid ${compact ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'} gap-2`}>
             {samples.map((sample) => {
               const isSelected = selectedSampleId === sample.id;
               return (
@@ -171,37 +206,45 @@ export const ImageDropzone: React.FC<ImageDropzoneProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onSelectSample(sample)}
-                  className={`group relative text-left p-2 rounded-lg border transition-all text-xs flex flex-col ${
+                  className={`group relative text-left p-1.5 rounded-lg border transition-all text-xs flex flex-col ${
                     isSelected
-                      ? 'border-cyan-400 bg-cyan-950/30 ring-1 ring-cyan-400'
+                      ? isAmber
+                        ? 'border-amber-400 bg-amber-950/30 ring-1 ring-amber-400'
+                        : 'border-cyan-400 bg-cyan-950/30 ring-1 ring-cyan-400'
                       : 'border-slate-800 hover:border-slate-600 bg-slate-950/50 hover:bg-slate-800/40'
                   }`}
                 >
-                  <div className="relative aspect-square w-full rounded overflow-hidden bg-slate-900 mb-2">
+                  <div className="relative aspect-square w-full rounded overflow-hidden bg-slate-900 mb-1.5">
                     <img
                       src={sample.thumbnail}
                       alt={sample.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     {isSelected && (
-                      <div className="absolute top-1 right-1 bg-cyan-500 text-black p-0.5 rounded-full shadow">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      <div className={`absolute top-1 right-1 ${isAmber ? 'bg-amber-500' : 'bg-cyan-500'} text-black p-0.5 rounded-full shadow`}>
+                        <CheckCircle2 className="w-3 h-3" />
                       </div>
                     )}
                     <span
-                      className={`absolute bottom-1 left-1 text-[9px] font-bold uppercase px-1 py-0.2 rounded backdrop-blur-sm ${
-                        sample.recommended_task === 'road'
+                      className={`absolute bottom-1 left-1 text-[8px] font-bold uppercase px-1 py-0.2 rounded backdrop-blur-sm ${
+                        sample.recommended_task === 'satellite_road'
+                          ? 'bg-amber-950/90 text-amber-300 border border-amber-800'
+                          : sample.recommended_task === 'road'
                           ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-800'
                           : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
                       }`}
                     >
-                      {sample.recommended_task === 'road' ? 'Дороги' : 'Здания'}
+                      {sample.recommended_task === 'satellite_road'
+                        ? 'Спутник'
+                        : sample.recommended_task === 'road'
+                        ? 'Дороги'
+                        : 'Здания'}
                     </span>
                   </div>
-                  <span className="font-medium text-slate-200 truncate w-full">
+                  <span className="font-medium text-slate-200 truncate w-full text-[11px]">
                     {sample.title}
                   </span>
-                  <span className="text-[10px] text-slate-400 truncate w-full">
+                  <span className="text-[9px] text-slate-400 truncate w-full">
                     {sample.description}
                   </span>
                 </button>

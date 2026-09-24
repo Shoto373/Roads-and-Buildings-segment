@@ -19,17 +19,73 @@ from tqdm import tqdm
 
 from config import parse_args
 from inference import load_model, predict_single, to_tensor
+from deepglobe_dataset import load_deepglobe_samples
 
 
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 
-def compute_metrics(pred_mask, gt_mask):
-    """Compute binary segmentation metrics.
+def compute_relaxed_metrics(pred_mask, gt_mask, slacks=(2, 3, 5)):
+    """Compute relaxed segmentation metrics with spatial tolerance buffer (slack).
+
+    Standard benchmark metric for road extraction (Mnih 2013, SpaceNet, DeepGlobe).
+    For a given slack distance rho:
+    - A predicted road pixel is considered a true positive if it lies within rho
+      pixels of any ground truth road pixel (Relaxed Precision).
+    - A ground truth road pixel is considered detected if it lies within rho
+      pixels of any predicted road pixel (Relaxed Recall).
+    - Relaxed F1 and Relaxed IoU:
+      IoU_relaxed = F1_relaxed / (2 - F1_relaxed)
+    """
+    pred = (pred_mask > 0).astype(np.uint8)
+    gt = (gt_mask > 0).astype(np.uint8)
+    eps = 1e-7
+
+    n_pred = int(np.sum(pred))
+    n_gt = int(np.sum(gt))
+
+    relaxed_metrics = {}
+
+    for s in slacks:
+        if n_pred == 0 and n_gt == 0:
+            relaxed_metrics[f'relaxed_{s}px_iou'] = 1.0
+            relaxed_metrics[f'relaxed_{s}px_f1'] = 1.0
+            relaxed_metrics[f'relaxed_{s}px_precision'] = 1.0
+            relaxed_metrics[f'relaxed_{s}px_recall'] = 1.0
+            continue
+        elif n_pred == 0 or n_gt == 0:
+            relaxed_metrics[f'relaxed_{s}px_iou'] = 0.0
+            relaxed_metrics[f'relaxed_{s}px_f1'] = 0.0
+            relaxed_metrics[f'relaxed_{s}px_precision'] = 0.0
+            relaxed_metrics[f'relaxed_{s}px_recall'] = 0.0
+            continue
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * s + 1, 2 * s + 1))
+        gt_dil = cv2.dilate(gt, kernel)
+        pred_dil = cv2.dilate(pred, kernel)
+
+        tp_pred = np.sum((pred & gt_dil).astype(bool))
+        tp_gt = np.sum((gt & pred_dil).astype(bool))
+
+        rel_prec = tp_pred / (n_pred + eps)
+        rel_rec = tp_gt / (n_gt + eps)
+        rel_f1 = 2 * rel_prec * rel_rec / (rel_prec + rel_rec + eps)
+        rel_iou = rel_f1 / (2 - rel_f1 + eps)
+
+        relaxed_metrics[f'relaxed_{s}px_iou'] = float(rel_iou)
+        relaxed_metrics[f'relaxed_{s}px_f1'] = float(rel_f1)
+        relaxed_metrics[f'relaxed_{s}px_precision'] = float(rel_prec)
+        relaxed_metrics[f'relaxed_{s}px_recall'] = float(rel_rec)
+
+    return relaxed_metrics
+
+
+def compute_metrics(pred_mask, gt_mask, slacks=(2, 3, 5)):
+    """Compute binary segmentation metrics (strict and relaxed).
 
     Both inputs are 2D numpy arrays with values 0 or 1.
-    Returns dict with IoU, Dice, Precision, Recall, F1, Accuracy.
+    Returns dict with strict and relaxed IoU, Dice, Precision, Recall, Accuracy.
     """
     pred = pred_mask.astype(bool).flatten()
     gt = gt_mask.astype(bool).flatten()
@@ -47,7 +103,7 @@ def compute_metrics(pred_mask, gt_mask):
     iou = tp / (tp + fp + fn + eps)
     dice = 2 * tp / (2 * tp + fp + fn + eps)
 
-    return {
+    metrics = {
         'iou': float(iou),
         'dice': float(dice),
         'precision': float(precision),
@@ -55,6 +111,13 @@ def compute_metrics(pred_mask, gt_mask):
         'f1': float(f1),
         'accuracy': float(accuracy),
     }
+
+    # Add relaxed metrics with buffer tolerance
+    if slacks:
+        relaxed = compute_relaxed_metrics(pred_mask, gt_mask, slacks=slacks)
+        metrics.update(relaxed)
+
+    return metrics
 
 
 def crop_image(img, target_size=1500):
@@ -102,17 +165,29 @@ def main():
     )
 
     # Test data
-    image_paths = sorted([
-        os.path.join(cfg.data.test_images_dir, f)
-        for f in os.listdir(cfg.data.test_images_dir)
-    ])
-    mask_paths = sorted([
-        os.path.join(cfg.data.test_masks_dir, f)
-        for f in os.listdir(cfg.data.test_masks_dir)
-    ])
+    if cfg.data.task == "deepglobe":
+        _, val_samples, _ = load_deepglobe_samples(cfg.data.dataset_dir)
+        if len(val_samples) == 0:
+            raise FileNotFoundError(f"No labeled validation samples found in: {cfg.data.dataset_dir}")
+        image_paths = [p[0] for p in val_samples]
+        mask_paths = [p[1] for p in val_samples]
+    else:
+        image_paths = sorted([
+            os.path.join(cfg.data.test_images_dir, f)
+            for f in os.listdir(cfg.data.test_images_dir)
+        ])
+        mask_paths = sorted([
+            os.path.join(cfg.data.test_masks_dir, f)
+            for f in os.listdir(cfg.data.test_masks_dir)
+        ])
+
+    if getattr(cfg, '_limit', None):
+        image_paths = image_paths[:cfg._limit]
+        mask_paths = mask_paths[:cfg._limit]
 
     n_test = len(image_paths)
-    print(f"\nEvaluating on {n_test} test images...\n")
+    slacks = getattr(cfg, '_slacks', (2, 3, 5))
+    print(f"\nEvaluating on {n_test} test images (Relaxed slacks: {slacks} px)...\n")
 
     all_metrics = []
 
@@ -136,7 +211,7 @@ def main():
         gt_crop = gt_mask[:min_h, :min_w]
         pr_crop = pred_mask_cropped[:min_h, :min_w]
 
-        metrics = compute_metrics(pr_crop, gt_crop)
+        metrics = compute_metrics(pr_crop, gt_crop, slacks=slacks)
         all_metrics.append(metrics)
 
     # Aggregate
@@ -147,19 +222,35 @@ def main():
         avg_metrics[f'{key}_std'] = float(np.std(values))
 
     # Print results
-    print(f"\n{'='*60}")
+    print(f"\n{'='*65}")
     print(f"  Test Results - {task.upper()} segmentation")
     print(f"  Model: {weights_path}")
     if use_tta:
         print(f"  TTA: enabled")
-    print(f"{'='*60}")
-    print(f"  IoU:       {avg_metrics['iou']:.4f} +/- {avg_metrics['iou_std']:.4f}")
-    print(f"  Dice:      {avg_metrics['dice']:.4f} +/- {avg_metrics['dice_std']:.4f}")
-    print(f"  Precision: {avg_metrics['precision']:.4f} +/- {avg_metrics['precision_std']:.4f}")
-    print(f"  Recall:    {avg_metrics['recall']:.4f} +/- {avg_metrics['recall_std']:.4f}")
-    print(f"  F1:        {avg_metrics['f1']:.4f} +/- {avg_metrics['f1_std']:.4f}")
-    print(f"  Accuracy:  {avg_metrics['accuracy']:.4f} +/- {avg_metrics['accuracy_std']:.4f}")
-    print(f"{'='*60}")
+    print(f"{'='*65}")
+    print(f"  [STRICT METRICS - EXACT PIXEL-TO-PIXEL MATCH]")
+    print(f"  Strict IoU:       {avg_metrics['iou']:.4f} +/- {avg_metrics['iou_std']:.4f} ({avg_metrics['iou']*100:.2f}%)")
+    print(f"  Strict Dice/F1:   {avg_metrics['dice']:.4f} +/- {avg_metrics['dice_std']:.4f} ({avg_metrics['dice']*100:.2f}%)")
+    print(f"  Strict Precision: {avg_metrics['precision']:.4f} +/- {avg_metrics['precision_std']:.4f} ({avg_metrics['precision']*100:.2f}%)")
+    print(f"  Strict Recall:    {avg_metrics['recall']:.4f} +/- {avg_metrics['recall_std']:.4f} ({avg_metrics['recall']*100:.2f}%)")
+    print(f"  Pixel Accuracy:   {avg_metrics['accuracy']:.4f} +/- {avg_metrics['accuracy_std']:.4f} ({avg_metrics['accuracy']*100:.2f}%)")
+    
+    # Relaxed metrics printout
+    has_relaxed = any(k.startswith('relaxed_') for k in avg_metrics.keys())
+    if has_relaxed:
+        print(f"{'-'*65}")
+        print(f"  [RELAXED METRICS - GIS/MNIH BENCHMARK WITH SPATIAL TOLERANCE]")
+        for s in slacks:
+            if f'relaxed_{s}px_iou' in avg_metrics:
+                iou_val = avg_metrics[f'relaxed_{s}px_iou']
+                iou_std = avg_metrics.get(f'relaxed_{s}px_iou_std', 0.0)
+                rec_val = avg_metrics.get(f'relaxed_{s}px_recall', 0.0)
+                prec_val = avg_metrics.get(f'relaxed_{s}px_precision', 0.0)
+                print(f"  Slack {s} px:")
+                print(f"    • Relaxed IoU:       {iou_val:.4f} +/- {iou_std:.4f} ({iou_val*100:.2f}%)")
+                print(f"    • Relaxed Precision: {prec_val:.4f} ({prec_val*100:.2f}%)")
+                print(f"    • Relaxed Recall:    {rec_val:.4f} ({rec_val*100:.2f}%)")
+    print(f"{'='*65}")
 
     # Save to JSON
     os.makedirs(cfg.outputs_dir, exist_ok=True)

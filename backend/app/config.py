@@ -22,9 +22,11 @@ class Settings:
     ALLOWED_EXTENSIONS: List[str] = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
 
     # Weights paths
-    ROAD_WEIGHTS_PATH: str = os.path.join(PROJECT_ROOT, "weights", "road_model_30_epochs.pth")
-    FALLBACK_ROAD_WEIGHTS: str = os.path.join(PROJECT_ROOT, "weights", "best_road_model.pth")
+    ROAD_WEIGHTS_PATH: str = os.path.join(PROJECT_ROOT, "weights", "best_road_model.pth")
+    FALLBACK_ROAD_WEIGHTS: str = os.path.join(PROJECT_ROOT, "weights", "road_model_30_epochs.pth")
     BUILDING_WEIGHTS_PATH: str = os.path.join(PROJECT_ROOT, "weights", "best_model.pth")
+    SATELLITE_ROAD_WEIGHTS_PATH: str = os.path.join(PROJECT_ROOT, "weights", "best_deepglobe_model.pth")
+    FALLBACK_SATELLITE_WEIGHTS: str = os.path.join(PROJECT_ROOT, "weights", "best_road_model.pth")
 
     # Directories
     OUTPUTS_DIR: str = os.path.join(PROJECT_ROOT, "outputs")

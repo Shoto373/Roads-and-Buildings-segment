@@ -36,33 +36,37 @@ class ModelManager:
         self.building_model = None
         self.building_is_logits = False
         self.building_weights_path = None
+        self.satellite_model = None
+        self.satellite_is_logits = True
+        self.satellite_weights_path = None
         self.preprocessing_fn = smp.encoders.get_preprocessing_fn("efficientnet-b7", "imagenet")
+        self.satellite_preprocessing_fn = smp.encoders.get_preprocessing_fn("resnet34", "imagenet")
         self.error_log = []
         self._initialized = True
 
     def load_all_models(self):
-        """Preload both road and building models into memory."""
+        """Preload road, building, and satellite models into memory."""
         print(f"[ModelManager] Initializing models on device: {self.device}...")
 
-        # 1. Road model
+        # 1. Road model (Aerial)
         road_path = settings.ROAD_WEIGHTS_PATH
         if not os.path.exists(road_path) and os.path.exists(settings.FALLBACK_ROAD_WEIGHTS):
             road_path = settings.FALLBACK_ROAD_WEIGHTS
 
         if os.path.exists(road_path):
             try:
-                print(f"[ModelManager] Loading Road model from {road_path}")
+                print(f"[ModelManager] Loading Aerial Road model from {road_path}")
                 self.road_model, self.road_is_logits = load_model(road_path, self.device)
                 self.road_weights_path = road_path
-                print(f"[ModelManager] Road model loaded successfully.")
+                print(f"[ModelManager] Aerial Road model loaded successfully.")
             except Exception as e:
-                err = f"Failed loading road model: {str(e)}"
+                err = f"Failed loading aerial road model: {str(e)}"
                 print(f"[ModelManager] ERROR: {err}")
                 self.error_log.append(err)
         else:
             self.error_log.append(f"Road weights not found at {road_path}")
 
-        # 2. Building model
+        # 2. Building model (Aerial)
         building_path = settings.BUILDING_WEIGHTS_PATH
         if os.path.exists(building_path):
             try:
@@ -77,10 +81,30 @@ class ModelManager:
         else:
             self.error_log.append(f"Building weights not found at {building_path}")
 
+        # 3. Satellite model (DeepGlobe / DeepLabV3+)
+        sat_path = getattr(settings, "SATELLITE_ROAD_WEIGHTS_PATH", None)
+        if sat_path and os.path.exists(sat_path):
+            try:
+                print(f"[ModelManager] Loading Satellite Road model from {sat_path}")
+                self.satellite_model, self.satellite_is_logits = load_model(sat_path, self.device)
+                self.satellite_weights_path = sat_path
+                print(f"[ModelManager] Satellite Road model loaded successfully.")
+            except Exception as e:
+                err = f"Failed loading satellite model: {str(e)}"
+                print(f"[ModelManager] ERROR: {err}")
+                self.error_log.append(err)
+        else:
+            # Automatic fallback to road model so satellite mode functions immediately
+            self.satellite_model = self.road_model
+            self.satellite_is_logits = self.road_is_logits
+            self.satellite_weights_path = self.road_weights_path
+            self.satellite_preprocessing_fn = self.preprocessing_fn
+            print(f"[ModelManager] Satellite Road model initialized (using aerial weights fallback).")
+
     def get_model(self, task: str) -> Tuple[Any, bool, Any]:
         """Get model, is_logits flag, and preprocessing function for given task."""
         task = task.lower()
-        if task == "road":
+        if task in ("road", "aerial_road"):
             if self.road_model is None:
                 raise RuntimeError("Road model is not loaded. Check server logs.")
             return self.road_model, self.road_is_logits, self.preprocessing_fn
@@ -88,8 +112,14 @@ class ModelManager:
             if self.building_model is None:
                 raise RuntimeError("Building model is not loaded. Check server logs.")
             return self.building_model, self.building_is_logits, self.preprocessing_fn
+        elif task in ("satellite_road", "satellite", "deepglobe"):
+            if self.satellite_model is None:
+                if self.road_model is not None:
+                    return self.road_model, self.road_is_logits, self.preprocessing_fn
+                raise RuntimeError("Satellite model is not loaded. Check server logs.")
+            return self.satellite_model, self.satellite_is_logits, self.satellite_preprocessing_fn
         else:
-            raise ValueError(f"Unknown task '{task}'. Expected 'road' or 'building'.")
+            raise ValueError(f"Unknown task '{task}'. Expected 'road', 'building', or 'satellite_road'.")
 
     def get_status(self) -> Dict[str, Any]:
         """Return readiness and memory status."""
@@ -108,6 +138,8 @@ class ModelManager:
             "road_weights": self.road_weights_path,
             "building_model_loaded": self.building_model is not None,
             "building_weights": self.building_weights_path,
+            "satellite_model_loaded": self.satellite_model is not None,
+            "satellite_weights": self.satellite_weights_path,
             "cuda": cuda_info,
             "errors": self.error_log,
         }

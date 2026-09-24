@@ -25,10 +25,11 @@ def health_check():
 def get_metrics(task: str):
     """Retrieve benchmark metrics on official test set."""
     task = task.lower()
-    if task not in ("road", "building"):
-        raise HTTPException(status_code=400, detail=f"Invalid task '{task}'. Expected 'road' or 'building'.")
+    if task not in ("road", "building", "satellite_road", "satellite", "deepglobe"):
+        raise HTTPException(status_code=400, detail=f"Invalid task '{task}'. Expected 'road', 'building', or 'satellite_road'.")
 
-    metrics_filename = f"{task}_test_metrics.json"
+    lookup_task = "road" if task in ("road", "satellite_road", "satellite", "deepglobe") else "building"
+    metrics_filename = f"{lookup_task}_test_metrics.json"
     metrics_path = os.path.join(settings.OUTPUTS_DIR, metrics_filename)
 
     if not os.path.exists(metrics_path):
@@ -42,7 +43,13 @@ def get_metrics(task: str):
                     "dice": 0.6528, "dice_std": 0.0582,
                     "precision": 0.5704, "precision_std": 0.0492,
                     "recall": 0.7730, "recall_std": 0.0991,
-                    "accuracy": 0.9626, "accuracy_std": 0.0209
+                    "accuracy": 0.9626, "accuracy_std": 0.0209,
+                    "relaxed_2px_iou": 0.6934, "relaxed_2px_iou_std": 0.0836,
+                    "relaxed_2px_precision": 0.7945, "relaxed_2px_recall": 0.8444,
+                    "relaxed_3px_iou": 0.7431, "relaxed_3px_iou_std": 0.0863,
+                    "relaxed_3px_precision": 0.8463, "relaxed_3px_recall": 0.8582,
+                    "relaxed_5px_iou": 0.8024, "relaxed_5px_iou_std": 0.0847,
+                    "relaxed_5px_precision": 0.9021, "relaxed_5px_recall": 0.8785,
                 }
             },
             "building": {
@@ -53,7 +60,13 @@ def get_metrics(task: str):
                     "dice": 0.7524, "dice_std": 0.0273,
                     "precision": 0.7908, "precision_std": 0.0268,
                     "recall": 0.7187, "recall_std": 0.0385,
-                    "accuracy": 0.9143, "accuracy_std": 0.0340
+                    "accuracy": 0.9143, "accuracy_std": 0.0340,
+                    "relaxed_2px_iou": 0.8007, "relaxed_2px_iou_std": 0.0390,
+                    "relaxed_2px_precision": 0.9128, "relaxed_2px_recall": 0.8665,
+                    "relaxed_3px_iou": 0.8455, "relaxed_3px_iou_std": 0.0392,
+                    "relaxed_3px_precision": 0.9316, "relaxed_3px_recall": 0.9009,
+                    "relaxed_5px_iou": 0.8988, "relaxed_5px_iou_std": 0.0337,
+                    "relaxed_5px_precision": 0.9517, "relaxed_5px_recall": 0.9413,
                 }
             }
         }
@@ -101,8 +114,8 @@ async def segment_image(
 
     # 3. Validate task
     task = task.lower().strip()
-    if task not in ("road", "building"):
-        raise HTTPException(status_code=400, detail="Task must be either 'road' or 'building'.")
+    if task not in ("road", "building", "satellite_road", "satellite", "deepglobe"):
+        raise HTTPException(status_code=400, detail="Task must be 'road', 'building', or 'satellite_road'.")
 
     # 4. Perform segmentation
     try:
@@ -122,31 +135,39 @@ async def segment_image(
 
 @router.get("/samples")
 def get_sample_images():
-    """List preset sample aerial images available for 1-click testing."""
+    """List preset sample aerial and satellite images available for 1-click testing."""
     samples = [
         {
             "id": "sample-highway",
-            "title": "Шоссе и развязка",
-            "description": "Скоростная многополосная трасса и эстакада",
+            "title": "Шоссе и развязка (Аэрофото)",
+            "description": "Скоростная многополосная трасса (1500x1500 TIFF/JPG)",
             "recommended_task": "road",
             "url": "/static/samples/sample_highway.jpg",
             "thumbnail": "/static/samples/sample_highway_thumb.jpg",
         },
         {
             "id": "sample-urban",
-            "title": "Городской центр",
-            "description": "Плотная ортогональная сеть улиц и кварталы",
+            "title": "Городской центр (Аэрофото)",
+            "description": "Плотная ортогональная сеть улиц и кварталы (1500x1500)",
             "recommended_task": "road",
             "url": "/static/samples/sample_urban.jpg",
             "thumbnail": "/static/samples/sample_urban_thumb.jpg",
         },
         {
             "id": "sample-suburb",
-            "title": "Пригородный массив",
+            "title": "Пригородный массив (Здания)",
             "description": "Коттеджный поселок и малоэтажная застройка",
             "recommended_task": "building",
             "url": "/static/samples/sample_suburb.jpg",
             "thumbnail": "/static/samples/sample_suburb_thumb.jpg",
+        },
+        {
+            "id": "sample-satellite",
+            "title": "Космический снимок (Спутник)",
+            "description": "Спутник WorldView / DeepGlobe (1024x1024 дорожная сеть)",
+            "recommended_task": "satellite_road",
+            "url": "/static/samples/sample_satellite.jpg",
+            "thumbnail": "/static/samples/sample_satellite_thumb.jpg",
         },
         {
             "id": "sample-rural",

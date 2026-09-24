@@ -1,12 +1,14 @@
-export type TaskType = 'road' | 'building';
+export type TaskType = 'road' | 'building' | 'satellite_road';
 
 export interface HealthStatus {
   status: 'ready' | 'degraded' | 'error';
   device: string;
   road_model_loaded: boolean;
   building_model_loaded: boolean;
+  satellite_model_loaded?: boolean;
   road_weights?: string;
   building_weights?: string;
+  satellite_weights?: string;
   cuda?: {
     cuda_device_name?: string;
     allocated_memory_mb?: number;
@@ -67,5 +69,20 @@ export interface MetricsData {
     recall_std?: number;
     accuracy: number;
     accuracy_std?: number;
+    relaxed_2px_iou?: number;
+    relaxed_2px_iou_std?: number;
+    relaxed_2px_precision?: number;
+    relaxed_2px_recall?: number;
+    relaxed_2px_f1?: number;
+    relaxed_3px_iou?: number;
+    relaxed_3px_iou_std?: number;
+    relaxed_3px_precision?: number;
+    relaxed_3px_recall?: number;
+    relaxed_3px_f1?: number;
+    relaxed_5px_iou?: number;
+    relaxed_5px_iou_std?: number;
+    relaxed_5px_precision?: number;
+    relaxed_5px_recall?: number;
+    relaxed_5px_f1?: number;
   };
 }

@@ -1,24 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
-import { ImageDropzone } from './components/ImageDropzone';
-import { InferenceControls } from './components/InferenceControls';
-import { ComparisonViewer } from './components/ComparisonViewer';
+import { DualWorkspace } from './components/DualWorkspace';
 import { MetricsView } from './components/MetricsView';
 import { GsdGuide } from './components/GsdGuide';
 import { HistoryDrawer } from './components/HistoryDrawer';
-import type {
-  HealthStatus,
-  SampleItem,
-  SegmentationResult,
-  TaskType,
-} from './types';
-import {
-  fetchHealth,
-  fetchSamples,
-  runSegmentation,
-  runSegmentationFromUrl,
-} from './api';
-import { AlertCircle } from 'lucide-react';
+import { ComparisonViewer } from './components/ComparisonViewer';
+import type { HealthStatus, SampleItem, SegmentationResult } from './types';
+import { fetchHealth, fetchSamples } from './api';
+import { AlertCircle, X } from 'lucide-react';
 
 const STORAGE_KEY = 'aerial_segnet_history_v1';
 
@@ -27,24 +16,11 @@ export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [samples, setSamples] = useState<SampleItem[]>([]);
 
-  // Selection & Parameters
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedSample, setSelectedSample] = useState<SampleItem | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const [task, setTask] = useState<TaskType>('road');
-  const [tta, setTta] = useState<boolean>(false);
-  const [opacity, setOpacity] = useState<number>(0.55);
-
-  // Execution state
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Results & History
-  const [currentResult, setCurrentResult] = useState<SegmentationResult | null>(null);
+  // History & Modal Inspection
   const [history, setHistory] = useState<SegmentationResult[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [historyModalResult, setHistoryModalResult] = useState<SegmentationResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Load initial health, samples, and localStorage history
   useEffect(() => {
@@ -87,79 +63,8 @@ export const App: React.FC = () => {
     }
   }, [history]);
 
-  // Elapsed timer during inference
-  useEffect(() => {
-    let interval: any;
-    if (isLoading) {
-      setElapsedSeconds(0);
-      const startTime = performance.now();
-      interval = setInterval(() => {
-        setElapsedSeconds((performance.now() - startTime) / 1000);
-      }, 100);
-    }
-    return () => clearInterval(interval);
-  }, [isLoading]);
-
-  const handleFileSelect = (file: File | null) => {
-    setSelectedFile(file);
-    setSelectedSample(null);
-    setErrorMessage(null);
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    } else {
-      setPreviewUrl(null);
-    }
-  };
-
-  const handleSelectSample = (sample: SampleItem) => {
-    setSelectedSample(sample);
-    setSelectedFile(null);
-    setPreviewUrl(sample.url);
-    setTask(sample.recommended_task);
-    setErrorMessage(null);
-  };
-
-  const handleRunSegmentation = async () => {
-    if (!selectedFile && !selectedSample) {
-      setErrorMessage('Пожалуйста, выберите снимок или воспользуйтесь готовым образцом.');
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      let result: SegmentationResult;
-      if (selectedFile) {
-        result = await runSegmentation(selectedFile, selectedFile.name, task, tta, opacity);
-      } else if (selectedSample) {
-        result = await runSegmentationFromUrl(
-          selectedSample.url,
-          `${selectedSample.id}.jpg`,
-          task,
-          tta,
-          opacity
-        );
-      } else {
-        throw new Error('No image specified');
-      }
-
-      setCurrentResult(result);
-      setHistory((prev) => [result, ...prev.filter((item) => item.id !== result.id)].slice(0, 10));
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Произошла непредвиденная ошибка при инференсе.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleReset = () => {
-    setCurrentResult(null);
-    setSelectedFile(null);
-    setSelectedSample(null);
-    setPreviewUrl(null);
-    setErrorMessage(null);
+  const handleAddToHistory = (result: SegmentationResult) => {
+    setHistory((prev) => [result, ...prev.slice(0, 9)]);
   };
 
   return (
@@ -194,46 +99,12 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 1: SEGMENTATION SCREEN */}
+        {/* TAB 1: DUAL WORKSPACE (Side-by-Side: Aerial 1500x1500 & Satellite 1024x1024) */}
         {activeTab === 'segment' && (
-          <div>
-            {currentResult ? (
-              /* RESULT VIEW */
-              <ComparisonViewer result={currentResult} onReset={handleReset} />
-            ) : (
-              /* INPUT & CONFIG VIEW */
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Left col: Dropzone & Samples (7 cols) */}
-                <div className="lg:col-span-7">
-                  <ImageDropzone
-                    selectedFile={selectedFile}
-                    onFileSelect={handleFileSelect}
-                    samples={samples}
-                    onSelectSample={handleSelectSample}
-                    selectedSampleId={selectedSample?.id || null}
-                    previewUrl={previewUrl}
-                    disabled={isLoading}
-                  />
-                </div>
-
-                {/* Right col: Controls & Launch (5 cols) */}
-                <div className="lg:col-span-5">
-                  <InferenceControls
-                    task={task}
-                    setTask={setTask}
-                    tta={tta}
-                    setTta={setTta}
-                    opacity={opacity}
-                    setOpacity={setOpacity}
-                    onRun={handleRunSegmentation}
-                    isLoading={isLoading}
-                    elapsedSeconds={elapsedSeconds}
-                    disabled={!selectedFile && !selectedSample}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <DualWorkspace
+            samples={samples}
+            onAddToHistory={handleAddToHistory}
+          />
         )}
 
         {/* TAB 2: METRICS & BENCHMARKS */}
@@ -243,25 +114,45 @@ export const App: React.FC = () => {
         {activeTab === 'guide' && <GsdGuide />}
       </main>
 
+      {/* Modal for viewing saved history item */}
+      {historyModalResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white">Просмотр результата из истории</h3>
+                <p className="text-xs text-slate-400">{historyModalResult.filename}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryModalResult(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <ComparisonViewer
+              result={historyModalResult}
+              onReset={() => setHistoryModalResult(null)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* History Drawer */}
       <HistoryDrawer
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         history={history}
         onSelectResult={(res) => {
-          setCurrentResult(res);
-          setActiveTab('segment');
+          setHistoryModalResult(res);
+          setIsHistoryOpen(false);
         }}
         onClearHistory={() => {
           setHistory([]);
           localStorage.removeItem(STORAGE_KEY);
         }}
       />
-
-      {/* Subtle Footer */}
-      <footer className="border-t border-slate-900 py-4 text-center text-xs text-slate-500">
-        EfficientNet-B7 + UNet • Combo Loss • PyTorch AMP • GSD ~1.0 м/пикс
-      </footer>
     </div>
   );
 };
