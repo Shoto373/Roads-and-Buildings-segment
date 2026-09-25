@@ -295,6 +295,7 @@ def main():
         train_dataset,
         batch_size=cfg.train.batch_size,
         shuffle=True,
+        drop_last=True,
         num_workers=cfg.train.num_workers,
     )
     valid_loader = DataLoader(
@@ -401,29 +402,42 @@ def main():
         lr_scheduler.step()
 
         # ---- Checkpointing ----
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_iou': best_iou_score,
+            'valid_iou': valid_iou,
+            'config': {
+                'encoder': cfg.model.encoder,
+                'decoder': cfg.model.decoder,
+                'classes': cfg.model.classes,
+                'task': cfg.data.task,
+            },
+        }
+
         if valid_iou > best_iou_score or epoch == 0:
             if valid_iou > best_iou_score:
                 best_iou_score = valid_iou
             epochs_no_improve = 0
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'best_iou': best_iou_score,
-                'config': {
-                    'encoder': cfg.model.encoder,
-                    'decoder': cfg.model.decoder,
-                    'classes': cfg.model.classes,
-                    'task': cfg.data.task,
-                },
-            }
+            checkpoint['best_iou'] = best_iou_score
             torch.save(checkpoint, cfg.best_model_path)
             print(f"  [+] Model saved! Best IoU: {best_iou_score:.4f}")
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= cfg.train.patience:
                 print(f"\n[!] Early stopping triggered after {cfg.train.patience} epochs without improvement.")
+                # Save final state before exit
+                milestone_path = os.path.join(cfg.weights_dir, f"{cfg.data.task}_model_{epoch+1}_epochs.pth")
+                torch.save(checkpoint, milestone_path)
+                print(f"  [+] Final milestone checkpoint saved: {milestone_path}")
                 break
+
+        # Save milestone checkpoint every 5 epochs or on the last epoch
+        if (epoch + 1) % 5 == 0 or (epoch + 1) == cfg.train.epochs:
+            milestone_path = os.path.join(cfg.weights_dir, f"{cfg.data.task}_model_{epoch+1}_epochs.pth")
+            torch.save(checkpoint, milestone_path)
+            print(f"  [+] Milestone checkpoint saved: {milestone_path}")
 
     writer.close()
     print(f"\nTraining complete! Best IoU: {best_iou_score:.4f}")
